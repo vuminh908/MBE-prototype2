@@ -3,6 +3,7 @@
 //    https://forum.arduino.cc/index.php?topic=288234.0
 //
 // Input 'a' followed by the desired servo angle into the Serial monitor (use carriage return \r)
+// Input only carriage return \r to toggle demo sine wave (about 0.625 Hz frequency)
 
 //#include <Servo.h>
 //#include <ADC.h>
@@ -20,8 +21,14 @@
 // uint16_t rawTorq; // Raw ADC value of current sensor output (proportional to torque)
 // uint16_t rawPos;  // Raw ADC value of feedback potentiometer voltage
 
-//const unsigned long timeDelay = 100; // Delay, in milliseconds
-//unsigned long timeStamp;
+const unsigned long timeDelay = 100; // Delay, in milliseconds, between changing angle values
+unsigned long timeStamp;
+boolean demo = false;
+boolean dir = true; // Indicates if counting up (true) or down (false) with angleIndex
+const byte numAngles = 9;
+const unsigned short angleArr[numAngles] = {0, 7, 26, 56, 90, 124, 154, 173, 180};
+byte angleIndex = 0; // Index in angleArr
+
 
 unsigned short angle = 90; // Angle value received from serial input
 const byte numCharsIn = 4;
@@ -70,7 +77,7 @@ void loop()
 
   if(newData)
   {
-    angle = atoi(inputArr);
+    angle = (!demo) ? atoi(inputArr) : angle;
     angle = constrain(angle, 0, 180);
     angleData = map(angle, 0, 180, 400, 5600);
     outputStr = "Angle: " + String(angle) + "\tValue: " + String(angleData);
@@ -81,10 +88,24 @@ void loop()
     sendAngleData();
   }
 
-  /*
-  // Sample data
+
+  // Demo sine wave
   if((millis() - timeStamp) >= timeDelay)
   {
+    if (demo)
+    {
+      angle = angleArr[angleIndex];
+
+      if (angle == 180 || angle == 0)
+        dir = !dir;
+
+      if (dir)
+        angleIndex++;
+      else
+        angleIndex--;
+
+      newData = true;
+    }
     //rawTorq = adc->analogRead(torqPin);
     //rawPos = adc->analogRead(posPin);
     
@@ -95,7 +116,6 @@ void loop()
 
     timeStamp = millis();
   }
-  */
 
 } // End loop function
 
@@ -130,10 +150,31 @@ void recieveAngleData()
         newData = true;
       }
     }
-    else if (rc == startMarkerIn) // Begin reading
+    else if (rc == startMarkerIn && !demo) // Begin reading
     {
       readState = READ;
     }
+    else if (rc == endMarkerIn) // Toggle demo
+    {
+      demo = !demo;
+      if (demo)
+      {
+        // Start at 0 degrees when enabling demo
+        angleIndex = 0;
+        angle = angleArr[angleIndex];
+        angleIndex++;
+        dir = true;
+      }
+      else
+      {
+        // Default to 90 degrees when disabling demo
+        inputArr[0] = '9';
+        inputArr[1] = '0';
+        inputArr[2] = '\0';
+      }
+      newData = true;
+    }
+
   } // End while loop
 
 } // End recieveAngleData function
