@@ -8,9 +8,12 @@
 //#include <Servo.h>
 //#include <ADC.h>
 
-#define WRITE_HEADER 0x96
-#define REG_POSITION_NEW 0x1E
-#define SERVO_SERIAL Serial1
+#define WRITE_HEADER      0x96
+#define RETURN_HEADER     0x69
+#define REG_POSITION_NEW  0x1E
+#define REG_POSITION      0xC
+#define SERIAL_TX         Serial1
+#define SERIAL_RX         Serial2
 
 // Servo servo;
 // const byte servoPin = 9;
@@ -40,10 +43,10 @@ const char endMarkerIn = '\r';
 //const char startMarkerOut = 'a';
 //const char endMarkerOut = '!';
 String outputStr;
-const byte numCharsOut = 64;
+const byte numCharsOut = 7;
 byte outputArr[numCharsOut];
 
-byte servoId = 0; // 0 for broadcast
+byte servoId = 0; // 0 or 255 for broadcast
 const byte minPacketLength = 5;
 unsigned short angleData = 3000; // Values range from 400 to 5600 by default (3000 <-> 90 degrees)
 const byte angleDataLength = 2;
@@ -54,7 +57,9 @@ void setup()
   Serial.begin(115200);
   //Serial.begin(9600);
 
-  SERVO_SERIAL.begin(115200);
+  pinMode(1, OUTPUT);
+  SERIAL_TX.begin(115200);
+  SERIAL_RX.begin(115200);
 
   // pinMode(torqPin, INPUT);
   // pinMode(posPin, INPUT);
@@ -86,6 +91,7 @@ void loop()
 
     // Write angle to servo
     sendAngleData();
+    requestPositionData();
   }
 
 
@@ -120,6 +126,7 @@ void loop()
 } // End loop function
 
 
+// Receive incoming packet from computer via USB serial
 void recieveAngleData()
 {
   static byte ndx = 0;
@@ -180,6 +187,7 @@ void recieveAngleData()
 } // End recieveAngleData function
 
 
+// Send packet to servo to set angle
 void sendAngleData()
 {
   outputArr[0] = WRITE_HEADER;
@@ -200,5 +208,56 @@ void sendAngleData()
     Serial.print(' ');
   }
   Serial.println();
-  SERVO_SERIAL.write(outputArr, (minPacketLength + angleDataLength));
+  SERIAL_TX.write(outputArr, (minPacketLength + angleDataLength));
 } // End sendAngleData function
+
+
+// Send packet to servo to receive position packet back
+void requestPositionData()
+{
+  outputArr[0] = WRITE_HEADER;
+  outputArr[1] = servoId;
+  outputArr[2] = REG_POSITION;
+  outputArr[3] = 0; // Reg data length
+  checksum = servoId + REG_POSITION;
+  outputArr[4] = (byte)(checksum % 256);
+
+  Serial.print("  ");
+  for(int i = 0; i < minPacketLength; i++)
+  {
+    if(outputArr[i] < 0x10)
+      Serial.print('0');
+    Serial.print(outputArr[i], HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+  SERIAL_TX.write(outputArr, minPacketLength);
+
+  // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
+  // Re-enable after reading returned data from servo
+  SERIAL_TX.end();
+  digitalWrite(1, LOW);
+  delay(20);  // Typ. 20 ms delay before servo returns data
+  readPositionData();
+  SERIAL_TX.begin(115200);
+} // End requestPositionData function
+
+
+// Read packet returned from servo via Serial2
+void readPositionData()
+{
+  byte rb;
+  Serial.print("  ");
+  while (SERIAL_RX.available())
+  {
+    rb = SERIAL_RX.read();
+    if(rb < 0x10)
+      Serial.print('0');
+    Serial.print(rb, HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+  // TODO parse received data and pass on to PC
+} // End readPositionData function
+
+// TODO helper function for debug printing byte streams to PC?
