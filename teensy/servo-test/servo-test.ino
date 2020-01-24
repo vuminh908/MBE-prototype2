@@ -32,7 +32,6 @@ const byte numAngles = 9;
 const unsigned short angleArr[numAngles] = {0, 7, 26, 56, 90, 124, 154, 173, 180};
 byte angleIndex = 0; // Index in angleArr
 
-
 unsigned short angle = 90; // Angle value received from serial input
 const byte numCharsIn = 4;
 char inputArr[numCharsIn];
@@ -50,7 +49,9 @@ byte servoId = 0; // 0 or 255 for broadcast
 const byte minPacketLength = 5;
 unsigned short angleData = 3000; // Values range from 400 to 5600 by default (3000 <-> 90 degrees)
 const byte angleDataLength = 2;
+const byte posDataLength = 2;
 unsigned long checksum = 0;
+
 
 void setup()
 {
@@ -180,6 +181,7 @@ void recieveAngleData()
         inputArr[2] = '\0';
       }
       newData = true;
+      Serial.clear();
     }
 
   } // End while loop
@@ -236,17 +238,25 @@ void requestPositionData()
   // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
   // Re-enable after reading returned data from servo
   SERIAL_TX.end();
+  SERIAL_RX.clear();
   digitalWrite(1, LOW);
   delay(20);  // Typ. 20 ms delay before servo returns data
-  readPositionData();
+  readPositionData(servoId);
   SERIAL_TX.begin(115200);
 } // End requestPositionData function
 
 
 // Read packet returned from servo via Serial2
-void readPositionData()
+bool readPositionData(byte id)
 {
-  byte rb;
+  static byte rb;
+  static enum {HEADER, ID, ADDR, LEN, DATA_L, DATA_H, CHKSM} readPosState = HEADER;
+
+  byte recId, recAddr, recLen, dataL, dataH;
+  short position;
+  bool validRX = true;
+  bool retVal = false;
+
   Serial.print("  ");
   while (SERIAL_RX.available())
   {
@@ -255,9 +265,60 @@ void readPositionData()
       Serial.print('0');
     Serial.print(rb, HEX);
     Serial.print(' ');
+
+    if (validRX)
+    {
+      switch (readPosState)
+      {
+        case HEADER:
+          if (rb == RETURN_HEADER)
+            readPosState = ID;
+          break;
+        case ID:
+          recId = rb;
+          if (recId != id)
+            validRX = false;
+          readPosState = ADDR;
+          break;
+        case ADDR:
+          recAddr = rb;
+          if (recAddr != REG_POSITION)
+            validRX = false;
+          readPosState = LEN;
+          break;
+        case LEN:
+          recLen = rb;
+          if (recLen != posDataLength)
+            validRX = false;
+          readPosState = DATA_L;
+          break;
+        case DATA_L:
+          dataL = rb;
+          readPosState = DATA_H;
+          break;
+        case DATA_H:
+          dataH = rb;
+          readPosState = CHKSM;
+          break;
+        case CHKSM:
+          checksum = recId + recAddr + recLen + dataL + dataH;
+          if ((byte)(checksum % 256) != rb)
+            validRX = false;
+          position = (short)(dataH) << 8;
+          position += dataL;
+          Serial.println("\n  Position: " + String(position));
+          retVal = true;
+          goto readPosRet;
+      }
+    }
   }
   Serial.println();
-  // TODO parse received data and pass on to PC
+  // TODO store received data and pass on to PC
+
+readPosRet:
+  SERIAL_RX.clear();
+  readPosState = HEADER;
+  return retVal;
 } // End readPositionData function
 
 // TODO helper function for debug printing byte streams to PC?
