@@ -12,6 +12,8 @@
 #define RETURN_HEADER     0x69
 #define REG_POSITION_NEW  0x1E
 #define REG_POSITION      0xC
+#define REG_ID            0x32
+#define REG_CONFIG_SAVE   0x70
 #define SERIAL_TX         Serial1
 #define SERIAL_RX         Serial2
 
@@ -38,6 +40,8 @@ char inputArr[numCharsIn];
 boolean newData  = false;
 const char startMarkerIn = 'a';
 const char endMarkerIn = '\r';
+const char demoMarker = '~';
+const char setIdMarker = '!';
 
 //const char startMarkerOut = 'a';
 //const char endMarkerOut = '!';
@@ -79,7 +83,7 @@ void setup()
 
 void loop()
 {
-  recieveAngleData();
+  receiveCommand();
 
   if(newData)
   {
@@ -128,10 +132,10 @@ void loop()
 
 
 // Receive incoming packet from computer via USB serial
-void recieveAngleData()
+void receiveCommand()
 {
   static byte ndx = 0;
-  static enum {NOREAD, READ} readState = NOREAD;
+  static enum {NOREAD, READ, SETID} readState = NOREAD;
 
   static char rc;
 
@@ -152,18 +156,36 @@ void recieveAngleData()
       }
       else // rc is endMarker, finish reading
       {
-        readState = NOREAD;
         inputArr[ndx] = '\0';
         ndx = 0;
-        newData = true;
+
+        if (readState == SETID)
+        {
+          byte newId = (byte)(atoi(inputArr));
+          setId(newId);
+        }
+        else
+        {
+          newData = true;
+        }
+        readState = NOREAD;
       }
     }
-    else if (rc == startMarkerIn && !demo) // Begin reading
+    else if (rc == startMarkerIn && !demo) // Begin reading angle
     {
       readState = READ;
     }
-    else if (rc == endMarkerIn) // Toggle demo
+    else if (rc == setIdMarker && !demo) // Begin reading ID to set
     {
+      readState = SETID;
+    }
+    else if (rc == endMarkerIn && !demo) // Request/Read servo ID
+    {
+      requestId();
+    }
+    else if (rc == demoMarker) // Toggle demo
+    {
+      Serial.clear();
       demo = !demo;
       if (demo)
       {
@@ -186,7 +208,7 @@ void recieveAngleData()
 
   } // End while loop
 
-} // End recieveAngleData function
+} // End receiveCommand function
 
 
 // Send packet to servo to set angle
@@ -320,5 +342,108 @@ readPosRet:
   readPosState = HEADER;
   return retVal;
 } // End readPositionData function
+
+
+// Request read of servo's ID register, then read what is returned
+void requestId()
+{
+  outputArr[0] = WRITE_HEADER;
+  outputArr[1] = 0;
+  outputArr[2] = REG_ID;
+  outputArr[3] = 0; // Reg data length
+  checksum = REG_ID;
+  outputArr[4] = (byte)(checksum % 256);
+
+  Serial.println("Request/Read ID:");
+  Serial.print("  ");
+  for(int i = 0; i < minPacketLength; i++)
+  {
+    if(outputArr[i] < 0x10)
+      Serial.print('0');
+    Serial.print(outputArr[i], HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+  SERIAL_TX.write(outputArr, minPacketLength);
+
+  // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
+  // Re-enable after reading returned data from servo
+  SERIAL_TX.end();
+  SERIAL_RX.clear();
+  digitalWrite(1, LOW);
+  delay(20);  // Typ. 20 ms delay before servo returns data
+  readId();
+  SERIAL_TX.begin(baudRate);
+} // End requestId function
+
+
+// Read ID value returned from servo
+void readId()
+{
+  static byte rb;
+
+  Serial.print("  ");
+  while (SERIAL_RX.available())
+  {
+    rb = SERIAL_RX.read();
+    if(rb < 0x10)
+      Serial.print('0');
+    Serial.print(rb, HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+} // End readId function
+
+
+// Set ID value for servo, then save config
+void setId(byte id)
+{
+  outputArr[0] = WRITE_HEADER;
+  outputArr[1] = servoId;
+  outputArr[2] = REG_ID;
+  outputArr[3] = 2; // Reg data length
+  outputArr[4] = id;
+  outputArr[5] = 0x00;
+  checksum = servoId + REG_ID + outputArr[3] + outputArr[4] + outputArr[5];
+  outputArr[6] = (byte)(checksum % 256);
+
+  Serial.println("Set ID to: " + String(id));
+  Serial.print("  ");
+  for(int i = 0; i < (minPacketLength + 2); i++)
+  {
+    if(outputArr[i] < 0x10)
+      Serial.print('0');
+    Serial.print(outputArr[i], HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+  SERIAL_TX.write(outputArr, minPacketLength + 2);
+  saveConfig(); // Save
+  servoId = id;
+} // End setId
+
+
+// Send save command
+void saveConfig()
+{
+  outputArr[0] = WRITE_HEADER;
+  outputArr[1] = servoId;
+  outputArr[2] = REG_CONFIG_SAVE;
+  outputArr[3] = 0; // Reg data length
+  checksum = servoId + REG_CONFIG_SAVE;
+  outputArr[4] = (byte)(checksum % 256);
+
+  Serial.print("  ");
+  for(int i = 0; i < minPacketLength; i++)
+  {
+    if(outputArr[i] < 0x10)
+      Serial.print('0');
+    Serial.print(outputArr[i], HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+  SERIAL_TX.write(outputArr, minPacketLength);
+} // End saveConfig
+
 
 // TODO helper function for debug printing byte streams to PC?
