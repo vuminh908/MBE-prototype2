@@ -8,14 +8,15 @@
 //#include <Servo.h>
 //#include <ADC.h>
 
-#define WRITE_HEADER      0x96
-#define RETURN_HEADER     0x69
-#define REG_POSITION_NEW  0x1E
-#define REG_POSITION      0xC
-#define REG_ID            0x32
-#define REG_CONFIG_SAVE   0x70
-#define SERIAL_TX         Serial1
-#define SERIAL_RX         Serial2
+#define WRITE_HEADER        0x96
+#define RETURN_HEADER       0x69
+#define REG_POSITION_NEW    0x1E
+#define REG_POSITION        0xC
+#define REG_ID              0x32
+#define REG_CONFIG_SAVE     0x70
+#define REG_FACTORY_DEFAULT 0x6E
+#define SERIAL_TX           Serial1
+#define SERIAL_RX           Serial2
 
 // Servo servo;
 // const byte servoPin = 9;
@@ -43,6 +44,9 @@ const char startMarkerIn = 'a';
 const char endMarkerIn = '\r';
 const char demoMarker = '~';
 const char setIdMarker = '!';
+const char resetIdMarker = '?';
+const char restoreIdMarker = '.';
+const char factoryRstMarker = '*';
 
 //const char startMarkerOut = 'a';
 //const char endMarkerOut = '!';
@@ -51,10 +55,10 @@ const byte numCharsOut = 7;
 byte outputArr[numCharsOut];
 
 byte servoId = 0; // 0 or 255 for broadcast
+byte expectedId = 0; // What ID is thought to have been set to in the servo
 const byte minPacketLength = 5;
 unsigned short angleData = 3000; // Values range from 400 to 5600 by default (3000 <-> 90 degrees)
-const byte angleDataLength = 2;
-const byte posDataLength = 2;
+const byte packetDataLength = 2;
 unsigned int checksum = 0;
 
 
@@ -91,8 +95,6 @@ void loop()
     angle = (!demo) ? atoi(inputArr) : angle;
     angle = constrain(angle, 0, 180);
     angleData = map(angle, 0, 180, 400, 5600);
-    outputStr = "Angle: " + String(angle) + "\tValue: " + String(angleData);
-    Serial.println(outputStr);
     newData = false;
 
     // Write angle to servo
@@ -172,17 +174,34 @@ void receiveCommand()
         readState = NOREAD;
       }
     }
-    else if (rc == startMarkerIn && !demo) // Begin reading angle
+    else if (!demo && rc != demoMarker)
     {
-      readState = READ;
-    }
-    else if (rc == setIdMarker && !demo) // Begin reading ID to set
-    {
-      readState = SETID;
-    }
-    else if (rc == endMarkerIn && !demo) // Request/Read servo ID
-    {
-      requestId();
+      switch (rc)
+      {
+        case startMarkerIn: // Begin reading angle
+          readState = READ;
+          break;
+        case setIdMarker: // Begin reading ID to set
+          readState = SETID;
+          break;
+        case endMarkerIn: // Request/Read servo ID
+          requestId();
+          break;
+        case resetIdMarker: // Reset ID (to 0) of packets Teensy sends
+          Serial.clear();
+          servoId = 0;
+          Serial.println("ID of packets reset to 0");
+          break;
+        case restoreIdMarker: // Set ID of packets Teensy sends to what it was before
+          Serial.clear();
+          servoId = expectedId;
+          Serial.println("ID of packets restored to " + String(expectedId));
+          break;
+        case factoryRstMarker: // Perform factory reset
+          Serial.clear();
+          doFactoryReset();
+          break;
+      }
     }
     else if (rc == demoMarker) // Toggle demo
     {
@@ -218,22 +237,14 @@ void sendAngleData()
   outputArr[0] = WRITE_HEADER;
   outputArr[1] = servoId;
   outputArr[2] = REG_POSITION_NEW;
-  outputArr[3] = angleDataLength; // Reg data length
+  outputArr[3] = packetDataLength; // Reg data length
   outputArr[4] = (byte)(angleData & 0xFF); // Data lower byte
   outputArr[5] = (byte)((angleData & 0xFF00) >> 8); // Data higher byte
-  checksum = servoId + REG_POSITION_NEW + angleDataLength + outputArr[4] + outputArr[5];
-  outputArr[6] = (byte)(checksum % 256);
+  outputArr[6] = computeChecksum(packetDataLength);
 
-  Serial.print("  ");
-  for(int i = 0; i < (minPacketLength + angleDataLength); i++)
-  {
-    if(outputArr[i] < 0x10)
-      Serial.print('0');
-    Serial.print(outputArr[i], HEX);
-    Serial.print(' ');
-  }
-  Serial.println();
-  SERIAL_TX.write(outputArr, (minPacketLength + angleDataLength));
+  Serial.println("Angle: " + String(angle) + "\tValue: " + String(angleData));
+  printPacketToSend(packetDataLength);
+  SERIAL_TX.write(outputArr, (minPacketLength + packetDataLength));
 } // End sendAngleData function
 
 
@@ -244,18 +255,9 @@ void requestPositionData()
   outputArr[1] = servoId;
   outputArr[2] = REG_POSITION;
   outputArr[3] = 0; // Reg data length
-  checksum = servoId + REG_POSITION;
-  outputArr[4] = (byte)(checksum % 256);
+  outputArr[4] = computeChecksum(0);
 
-  Serial.print("  ");
-  for(int i = 0; i < minPacketLength; i++)
-  {
-    if(outputArr[i] < 0x10)
-      Serial.print('0');
-    Serial.print(outputArr[i], HEX);
-    Serial.print(' ');
-  }
-  Serial.println();
+  printPacketToSend(0);
   SERIAL_TX.write(outputArr, minPacketLength);
 
   // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
@@ -311,7 +313,7 @@ bool readPositionData(byte id)
           break;
         case LEN:
           recLen = rb;
-          if (recLen != posDataLength)
+          if (recLen != packetDataLength)
             validRX = false;
           readPosState = DATA_L;
           break;
@@ -352,19 +354,10 @@ void requestId()
   outputArr[1] = 0;
   outputArr[2] = REG_ID;
   outputArr[3] = 0; // Reg data length
-  checksum = REG_ID;
-  outputArr[4] = (byte)(checksum % 256);
+  outputArr[4] = computeChecksum(0);
 
   Serial.println("Request/Read ID:");
-  Serial.print("  ");
-  for(int i = 0; i < minPacketLength; i++)
-  {
-    if(outputArr[i] < 0x10)
-      Serial.print('0');
-    Serial.print(outputArr[i], HEX);
-    Serial.print(' ');
-  }
-  Serial.println();
+  printPacketToSend(0);
   SERIAL_TX.write(outputArr, minPacketLength);
 
   // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
@@ -405,23 +398,30 @@ void setId(byte id)
   outputArr[3] = 2; // Reg data length
   outputArr[4] = id;
   outputArr[5] = 0x00;
-  checksum = servoId + REG_ID + outputArr[3] + outputArr[4] + outputArr[5];
-  outputArr[6] = (byte)(checksum % 256);
+  outputArr[6] = computeChecksum(packetDataLength);
 
   Serial.println("Set ID to: " + String(id));
-  Serial.print("  ");
-  for(int i = 0; i < (minPacketLength + 2); i++)
-  {
-    if(outputArr[i] < 0x10)
-      Serial.print('0');
-    Serial.print(outputArr[i], HEX);
-    Serial.print(' ');
-  }
-  Serial.println();
+  printPacketToSend(packetDataLength);
   SERIAL_TX.write(outputArr, minPacketLength + 2);
   saveConfig(); // Save
-  servoId = id;
+  expectedId = id;
+  servoId = expectedId;
 } // End setId
+
+
+// Perform factory reset
+void doFactoryReset()
+{
+  outputArr[0] = WRITE_HEADER;
+  outputArr[1] = servoId;
+  outputArr[2] = REG_FACTORY_DEFAULT;
+  outputArr[3] = 0; // Reg data length
+  outputArr[4] = computeChecksum(0);
+
+  Serial.println("FACTORY RESET:");
+  printPacketToSend(0);
+  SERIAL_TX.write(outputArr, minPacketLength);
+} // End doFactoryReset
 
 
 // Send save command
@@ -431,11 +431,28 @@ void saveConfig()
   outputArr[1] = servoId;
   outputArr[2] = REG_CONFIG_SAVE;
   outputArr[3] = 0; // Reg data length
-  checksum = servoId + REG_CONFIG_SAVE;
-  outputArr[4] = (byte)(checksum % 256);
+  outputArr[4] = computeChecksum(0);
 
+  printPacketToSend(0);
+  SERIAL_TX.write(outputArr, minPacketLength);
+} // End saveConfig
+
+
+// Compute checksum of given length of outputArr
+byte computeChecksum(byte dataLength)
+{
+  checksum = 0;
+  for (int j = 1; j <= (minPacketLength - 2 + dataLength); j++)
+    checksum += outputArr[j];
+
+  return (byte)(checksum % 256);
+} // End computeChecksum
+
+
+void printPacketToSend(byte dataLength)
+{
   Serial.print("  ");
-  for(int i = 0; i < minPacketLength; i++)
+  for(int i = 0; i < (minPacketLength + dataLength); i++)
   {
     if(outputArr[i] < 0x10)
       Serial.print('0');
@@ -443,8 +460,7 @@ void saveConfig()
     Serial.print(' ');
   }
   Serial.println();
-  SERIAL_TX.write(outputArr, minPacketLength);
-} // End saveConfig
+} // End printPacketToSend
 
 
 // TODO helper function for debug printing byte streams to PC?
