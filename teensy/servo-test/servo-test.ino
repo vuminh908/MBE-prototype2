@@ -26,6 +26,7 @@
 // uint16_t rawTorq; // Raw ADC value of current sensor output (proportional to torque)
 // uint16_t rawPos;  // Raw ADC value of feedback potentiometer voltage
 
+const unsigned long baudRate = 115200;
 const unsigned long timeDelay = 100; // Delay, in milliseconds, between changing angle values
 unsigned long timeStamp;
 boolean demo = false;
@@ -54,17 +55,17 @@ const byte minPacketLength = 5;
 unsigned short angleData = 3000; // Values range from 400 to 5600 by default (3000 <-> 90 degrees)
 const byte angleDataLength = 2;
 const byte posDataLength = 2;
-unsigned long checksum = 0;
+unsigned int checksum = 0;
 
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(baudRate);
   //Serial.begin(9600);
 
   pinMode(1, OUTPUT);
-  SERIAL_TX.begin(115200);
-  SERIAL_RX.begin(115200);
+  SERIAL_TX.begin(baudRate);
+  SERIAL_RX.begin(baudRate);
 
   // pinMode(torqPin, INPUT);
   // pinMode(posPin, INPUT);
@@ -264,7 +265,7 @@ void requestPositionData()
   digitalWrite(1, LOW);
   delay(20);  // Typ. 20 ms delay before servo returns data
   readPositionData(servoId);
-  SERIAL_TX.begin(115200);
+  SERIAL_TX.begin(baudRate);
 } // End requestPositionData function
 
 
