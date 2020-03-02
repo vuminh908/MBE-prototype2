@@ -2,8 +2,17 @@
 //    Code from user Robin2 on Arudino Forum used as reference
 //    https://forum.arduino.cc/index.php?topic=288234.0
 //
+// Target Board: Teensy 3.2
+// For use with Hitec D-series servos (i.e. D956WP)
+//
 // Input 'a' followed by the desired servo angle into the Serial monitor (use carriage return \r)
-// Input only carriage return \r to toggle demo sine wave (about 0.625 Hz frequency)
+// Input '~' to toggle demo sine wave (about 0.625 Hz frequency)
+// Input only carriage return \r to read ID register
+// Input '!' followed by desired ID and \r to set ID of servo (to keep ID set, power-cycle servo)
+// Input '*' to perform factory reset
+// Input '?' to set ID field in packets to 0 (broadcast)
+// Input 'q', 'w', or 'e' to set ID field in packets to 1, 2, or 3, respectively
+// Input '.' to reset ID field in packets to what it was before
 
 //#include <Servo.h>
 //#include <ADC.h>
@@ -191,6 +200,20 @@ void receiveCommand()
           Serial.clear();
           servoId = 0;
           Serial.println("ID of packets reset to 0");
+          break;
+        case 'q': // Set ID in packets to 1
+          Serial.clear();
+          servoId = 1;
+          Serial.println("ID of packets set to 1");
+          break;
+        case 'w': // Set ID in packets to 2
+          Serial.clear();
+          servoId = 2;
+          Serial.println("ID of packets set to 2");
+          break;
+        case 'e': // Set ID in packets to 3
+          Serial.clear();
+          servoId = 3;
           break;
         case restoreIdMarker: // Set ID of packets Teensy sends to what it was before
           Serial.clear();
@@ -395,15 +418,16 @@ void setId(byte id)
   outputArr[0] = WRITE_HEADER;
   outputArr[1] = servoId;
   outputArr[2] = REG_ID;
-  outputArr[3] = 2; // Reg data length
+  outputArr[3] = packetDataLength; // Reg data length
   outputArr[4] = id;
   outputArr[5] = 0x00;
   outputArr[6] = computeChecksum(packetDataLength);
 
   Serial.println("Set ID to: " + String(id));
   printPacketToSend(packetDataLength);
-  SERIAL_TX.write(outputArr, minPacketLength + 2);
+  SERIAL_TX.write(outputArr, (minPacketLength + packetDataLength));
   saveConfig(); // Save
+  Serial.println("To keep ID, power cycle servo");
   expectedId = id;
   servoId = expectedId;
 } // End setId
@@ -430,11 +454,13 @@ void saveConfig()
   outputArr[0] = WRITE_HEADER;
   outputArr[1] = servoId;
   outputArr[2] = REG_CONFIG_SAVE;
-  outputArr[3] = 0; // Reg data length
-  outputArr[4] = computeChecksum(0);
+  outputArr[3] = packetDataLength; // Reg data length
+  outputArr[4] = 0xFF;
+  outputArr[5] = 0xFF;
+  outputArr[6] = computeChecksum(2);
 
-  printPacketToSend(0);
-  SERIAL_TX.write(outputArr, minPacketLength);
+  printPacketToSend(2);
+  SERIAL_TX.write(outputArr, (minPacketLength + packetDataLength));
 } // End saveConfig
 
 
@@ -461,6 +487,3 @@ void printPacketToSend(byte dataLength)
   }
   Serial.println();
 } // End printPacketToSend
-
-
-// TODO helper function for debug printing byte streams to PC?
