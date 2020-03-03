@@ -14,27 +14,22 @@
 // Input 'q', 'w', or 'e' to set ID field in packets to 1, 2, or 3, respectively
 // Input '.' to reset ID field in packets to what it was before
 
-//#include <Servo.h>
 //#include <ADC.h>
 
 #define WRITE_HEADER        0x96
 #define RETURN_HEADER       0x69
 #define REG_POSITION_NEW    0x1E
-#define REG_POSITION        0xC
+#define REG_POSITION        0x0C
 #define REG_ID              0x32
 #define REG_CONFIG_SAVE     0x70
 #define REG_FACTORY_DEFAULT 0x6E
 #define SERIAL_TX           Serial1
 #define SERIAL_RX           Serial2
 
-// Servo servo;
-// const byte servoPin = 9;
-
 // ADC *adc = new ADC();
 // const byte torqPin = A2;
-// const byte posPin = A9;
 // uint16_t rawTorq; // Raw ADC value of current sensor output (proportional to torque)
-// uint16_t rawPos;  // Raw ADC value of feedback potentiometer voltage
+unsigned short position;  // Value read from REG_POSITION register of servo
 
 const unsigned long baudRate = 115200;
 const unsigned long timeDelay = 100; // Delay, in milliseconds, between changing angle values
@@ -74,7 +69,6 @@ unsigned int checksum = 0;
 void setup()
 {
   Serial.begin(baudRate);
-  //Serial.begin(9600);
 
   pinMode(1, OUTPUT);
   SERIAL_TX.begin(baudRate);
@@ -86,13 +80,10 @@ void setup()
   // adc->setResolution(16);
   // adc->setConversionSpeed(ADC_CONVERSION_SPEED::MED_SPEED);
   // adc->setSamplingSpeed(ADC_SAMPLING_SPEED::MED_SPEED);
-  
-  // servo.attach(servoPin);
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
 
-  // timeStamp = micros();
 } // End setup function
 
 void loop()
@@ -301,7 +292,6 @@ bool readPositionData(byte id)
   static enum {HEADER, ID, ADDR, LEN, DATA_L, DATA_H, CHKSM} readPosState = HEADER;
 
   byte recId, recAddr, recLen, dataL, dataH;
-  short position;
   bool validRX = true;
   bool retVal = false;
 
@@ -324,7 +314,7 @@ bool readPositionData(byte id)
           break;
         case ID:
           recId = rb;
-          if (recId != id)
+          if (id != 0 && recId != id)
             validRX = false;
           readPosState = ADDR;
           break;
