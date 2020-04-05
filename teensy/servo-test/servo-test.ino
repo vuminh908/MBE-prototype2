@@ -14,7 +14,7 @@
 // Input 'q', 'w', or 'e' to set ID field in packets to 1, 2, or 3, respectively
 // Input '.' to reset ID field in packets to what it was before
 
-//#include <ADC.h>
+#include <ADC.h>
 
 #define WRITE_HEADER        0x96
 #define RETURN_HEADER       0x69
@@ -26,10 +26,10 @@
 #define SERIAL_TX           Serial1
 #define SERIAL_RX           Serial2
 
-// ADC *adc = new ADC();
-// const byte torqPin = A2;
-// uint16_t rawTorq; // Raw ADC value of current sensor output (proportional to torque)
-unsigned short position;  // Value read from REG_POSITION register of servo
+ADC *adc = new ADC();
+const byte torqPin = A9;
+unsigned short rawTorq; // Raw ADC value of current sensor output (proportional to torque)
+unsigned short rawPos;  // Value read from REG_POSITION register of servo
 
 const unsigned long baudRate = 115200;
 const unsigned long timeDelay = 100; // Delay, in milliseconds, between changing angle values
@@ -55,7 +55,7 @@ const char factoryRstMarker = '*';
 //const char startMarkerOut = 'a';
 //const char endMarkerOut = '!';
 String outputStr;
-const byte numCharsOut = 7;
+const byte numCharsOut = 30; //7;
 byte outputArr[numCharsOut];
 
 byte servoId = 0; // 0 or 255 for broadcast
@@ -74,12 +74,11 @@ void setup()
   SERIAL_TX.begin(baudRate);
   SERIAL_RX.begin(baudRate);
 
-  // pinMode(torqPin, INPUT);
-  // pinMode(posPin, INPUT);
-  // adc->setAveraging(16);
-  // adc->setResolution(16);
-  // adc->setConversionSpeed(ADC_CONVERSION_SPEED::MED_SPEED);
-  // adc->setSamplingSpeed(ADC_SAMPLING_SPEED::MED_SPEED);
+  pinMode(torqPin, INPUT);
+  adc->adc0->setAveraging(8);
+  adc->adc0->setResolution(16);
+  adc->adc0->setConversionSpeed(ADC_CONVERSION_SPEED::HIGH_SPEED_16BITS);
+  adc->adc0->setSamplingSpeed(ADC_SAMPLING_SPEED::MED_SPEED);
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
@@ -96,10 +95,24 @@ void loop()
     angle = constrain(angle, 0, 180);
     angleData = map(angle, 0, 180, 400, 5600);
     newData = false;
+    // Serial.println("* Received Command: " + String(micros())); // For determining timing
 
-    // Write angle to servo
+    // Write angle to servo and request position
     sendAngleData();
+    // Serial.println("* Set Angle: " + String(micros())); // For determining timing
     requestPositionData();
+    // Serial.println("* Read Position Data: " + String(micros())); // For determining timing
+
+    // Read output from current sensor
+    readTorqueData();
+    // Serial.println("* Torque Data Read: " + String(micros())); // For determining timing
+
+    // Send sampled data back to computer
+    outputStr = "Position: " + String(rawPos) + "\tTorque: " + String(rawTorq);
+    Serial.println(outputStr);
+    // outputStr = "a" + String(rawPos) + "A" + String(rawTorq) + "\r";
+    // outputStr.toCharArray(outputArr, numCharsOut);
+    // Serial.write(outputArr);
   }
 
 
@@ -120,13 +133,6 @@ void loop()
 
       newData = true;
     }
-    //rawTorq = adc->analogRead(torqPin);
-    //rawPos = adc->analogRead(posPin);
-    
-    //outputStr = "Torque: " + String(rawTorq) + "\tPosition: " + String(rawPos);
-    //outputStr.toCharArray(outputArr, numCharsOut);
-    //Serial.write(outputArr);
-    //Serial.println(outputStr);
 
     timeStamp = millis();
   }
@@ -262,7 +268,7 @@ void sendAngleData()
 } // End sendAngleData function
 
 
-// Send packet to servo to receive position packet back
+// Send packet to servo to receive position packet back (also calls read function)
 void requestPositionData()
 {
   outputArr[0] = WRITE_HEADER;
@@ -342,22 +348,31 @@ bool readPositionData(byte id)
           checksum = recId + recAddr + recLen + dataL + dataH;
           if ((byte)(checksum % 256) != rb)
             validRX = false;
-          position = (short)(dataH) << 8;
-          position += dataL;
-          Serial.println("\n  Position: " + String(position));
+          rawPos = (short)(dataH) << 8;
+          rawPos += dataL;
+          // Serial.println("\n  Position: " + String(rawPos)); // Test print
+          Serial.println();
           retVal = true;
           goto readPosRet;
       }
     }
   }
   Serial.println();
-  // TODO store received data and pass on to PC
 
 readPosRet:
   SERIAL_RX.clear();
   readPosState = HEADER;
   return retVal;
 } // End readPositionData function
+
+
+// Read voltage from current sensor (for torque) via ADC
+void readTorqueData()
+{
+  rawTorq = adc->adc0->analogRead(torqPin);
+  rawTorq = rawTorq & 0xFFF8; // Filter out some small noise (use 13 out of 16 bits)
+  // Serial.println("  Torque: " + String(rawTorq)); // Test print
+}
 
 
 // Request read of servo's ID register, then read what is returned
@@ -388,6 +403,11 @@ void requestId()
 void readId()
 {
   static byte rb;
+  static enum {HEADER, ID, ADDR, LEN, DATA_L, DATA_H, CHKSM} readIdState = HEADER;
+
+  byte recId, recAddr, recLen, dataL, dataH;
+  byte id;
+  bool validRX = true;
 
   Serial.print("  ");
   while (SERIAL_RX.available())
@@ -397,8 +417,57 @@ void readId()
       Serial.print('0');
     Serial.print(rb, HEX);
     Serial.print(' ');
+
+    if (validRX)
+    {
+      switch (readIdState)
+      {
+        case HEADER:
+          if (rb == RETURN_HEADER)
+            readIdState = ID;
+          break;
+        case ID:
+          recId = rb;
+          if (id != 0 && recId != id)
+            validRX = false;
+          readIdState = ADDR;
+          break;
+        case ADDR:
+          recAddr = rb;
+          if (recAddr != REG_ID)
+            validRX = false;
+          readIdState = LEN;
+          break;
+        case LEN:
+          recLen = rb;
+          if (recLen != packetDataLength)
+            validRX = false;
+          readIdState = DATA_L;
+          break;
+        case DATA_L:
+          dataL = rb;
+          readIdState = DATA_H;
+          break;
+        case DATA_H:
+          dataH = rb;
+          readIdState = CHKSM;
+          break;
+        case CHKSM:
+          checksum = recId + recAddr + recLen + dataL + dataH;
+          id = dataL;
+          if ((byte)(checksum % 256) != rb || id != recId)
+            validRX = false;
+          if (validRX)
+            Serial.println("\n  ID: " + String(id));
+          goto readIdRet;
+      }
+    }
   }
   Serial.println();
+
+readIdRet:
+  SERIAL_RX.clear();
+  readIdState = HEADER;
 } // End readId function
 
 
