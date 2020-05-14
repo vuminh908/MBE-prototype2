@@ -73,11 +73,11 @@ const byte minPacketLength = 5;
 
 // Angle values for sending to links
 // Will be 100x the actual values to avoid truncating the first 2 decimals
-unsigned short angle1;
-unsigned short angle2;
-unsigned short angle3;
-unsigned short angle4;
-unsigned short angle5;
+uint16_t angle1;
+uint16_t angle2;
+uint16_t angle3;
+uint16_t angle4;
+uint16_t angle5;
 
 void setup()
 {
@@ -380,11 +380,11 @@ void recieveCommand()
 // Send angles to each link servo
 void sendAngleData()
 {
-  unsigned short mappedAngle1;
-  unsigned short mappedAngle2;
-  unsigned short mappedAngle3;
-  unsigned short mappedAngle4;
-  unsigned short mappedAngle5;
+  uint16_t mappedAngle1;
+  uint16_t mappedAngle2;
+  uint16_t mappedAngle3;
+  uint16_t mappedAngle4;
+  uint16_t mappedAngle5;
 
   // Can safely assume at least 1 link
   angle1 = atof(input1) * 100;
@@ -502,7 +502,7 @@ void reportBack()
 
 
 // Send packet to specified servo to set angle
-void sendAnglePacket(byte servoId, unsigned short mappedAngle)
+void sendAnglePacket(byte servoId, uint16_t mappedAngle)
 {
   outputPkts[0] = WRITE_HEADER;
   outputPkts[1] = servoId;
@@ -517,9 +517,9 @@ void sendAnglePacket(byte servoId, unsigned short mappedAngle)
 
 
 // Send packet to servo to receive position packet back (also calls read function)
-unsigned short requestPositionData(byte servoId)
+uint16_t requestPositionData(byte servoId)
 {
-  unsigned short posData = 0;
+  uint16_t posData = 0;
 
   outputPkts[0] = WRITE_HEADER;
   outputPkts[1] = servoId;
@@ -542,7 +542,7 @@ unsigned short requestPositionData(byte servoId)
 
 
 // Read packet returned from servo via Serial2
-unsigned short readPositionData(byte servoId)
+uint16_t readPositionData(byte servoId)
 {
   static byte rb;
   static enum {HEADER, ID, ADDR, LEN, DATA_L, DATA_H, CHKSM} readPosState = HEADER;
@@ -550,7 +550,7 @@ unsigned short readPositionData(byte servoId)
   byte recId, recAddr, recLen, dataL, dataH;
   unsigned int checksum;
   bool validRX = true;
-  unsigned short rawPos = 0;
+  uint16_t rawPos = 0;
 
   // Serial.print("  ");
   while (SERIAL_RX.available())
@@ -615,9 +615,9 @@ readPosRet:
 
 
 // Read voltage from current sensor (for torque) via ADC
-unsigned short readTorqueData(byte servoId)
+uint16_t readTorqueData(byte servoId)
 {
-  unsigned short rawTorq = 0;
+  uint16_t rawTorq = 0;
   byte p = constrain(servoId, 1, numLinks);
 
   rawTorq = adc->adc0->analogRead(torqPins[p]);
