@@ -133,6 +133,7 @@ void loop()
     /**/
     
     //reportBack();
+    /*Serial.println();*/
 
     sendAngleData();
     /**/
@@ -486,12 +487,12 @@ void reportBack()
   // Position values with corresponding start markers,
   // then torque values with corresponding start markers (startMarkerOut)
   // and finally the end marker
-  outputStr = startMarker1 + String(rawPos1) + startMarker2 + String(rawPos2) +
-              startMarker3 + String(rawPos3) + startMarker4 + String(rawPos4) +
-              startMarker5 + String(rawPos5) +
-              startMarkerOut1 + String(rawTorq1) + startMarkerOut2 + String(rawTorq2) +
-              startMarkerOut3 + String(rawTorq3) + startMarkerOut4 + String(rawTorq4) +
-              startMarkerOut5 + String(rawTorq5) + endMarkerOut;
+  outputStr = startMarker1 + String(rawPos1) + startMarkerOut1 + String(rawTorq1) +
+              startMarker2 + String(rawPos2) + startMarkerOut2 + String(rawTorq2) +
+              startMarker3 + String(rawPos3) + startMarkerOut3 + String(rawTorq3) +
+              startMarker4 + String(rawPos4) + startMarkerOut4 + String(rawTorq4) +
+              startMarker5 + String(rawPos5) + startMarkerOut5 + String(rawTorq5) +
+              endMarkerOut;
 
   outputStr.toCharArray(output, numCharsOut);
 
