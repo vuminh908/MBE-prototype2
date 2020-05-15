@@ -428,8 +428,6 @@ void readId()
           break;
         case ID:
           recId = rb;
-          if (id != 0 && recId != id)
-            validRX = false;
           readIdState = ADDR;
           break;
         case ADDR:
@@ -455,7 +453,7 @@ void readId()
         case CHKSM:
           checksum = recId + recAddr + recLen + dataL + dataH;
           id = dataL;
-          if ((byte)(checksum % 256) != rb || id != recId)
+          if ((byte)(checksum % 256) != rb || (recId != 0 && id != recId))
             validRX = false;
           if (validRX)
             Serial.println("\n  ID: " + String(id));
