@@ -34,7 +34,7 @@ uint16_t rawPos5;
 
 // ADC variables
 ADC *adc = new ADC();
-const byte torqPins[maxNumLinks] = {A0, A1, A2, A3, A4};
+const byte torqPins[maxNumLinks] = {A9, A8, A7, A6, A5};
 
 // Values for parsing input from or writing output to serial port
 // 3 digits, a decimal point, 2 decimal places, and a null terminator ('\0')
@@ -107,7 +107,7 @@ void loop()
 
   if(newData)
   {
-    //readServoData();
+    readServoData();
     /*
     Serial.print(rawPos1);
     Serial.print('\t');
@@ -136,7 +136,7 @@ void loop()
     /*Serial.println();*/
 
     sendAngleData();
-    /**/
+    /*
     Serial.print(angle1);
     Serial.print("\t");
     Serial.print(angle2);
@@ -187,6 +187,7 @@ void recieveCommand()
               if(tempNum >= 1 && tempNum <= maxNumLinks)
               {
                 numLinks = tempNum;
+                Serial.println(numLinks);
               }
               else // Erroneous link number, don't modify numLinks, drop attempted read and move on
               {
@@ -197,6 +198,7 @@ void recieveCommand()
             {
               readState = NOREAD;
             }
+            break;
           }
         case READ1: // Read angle for servo 1
           {
@@ -484,15 +486,54 @@ void readServoData()
 // Write servo values back to serial port (can be read in through LabVIEW or serial monitor)
 void reportBack()
 {
+  // TODO use C string function instead to assemble output string
+  String pos[maxNumLinks] = {String(rawPos1), String(rawPos2), String(rawPos3), String(rawPos4), String(rawPos5)};
+  String torq[maxNumLinks] = {String(rawTorq1), String(rawTorq2), String(rawTorq3), String(rawTorq4), String(rawTorq5)};
+
+  for (int p = 0; p < maxNumLinks; p++)
+  {
+    switch(pos[p].length())
+    {
+      case 1: pos[p] = "0000" + pos[p];
+              break;
+      case 2: pos[p] = "000" + pos[p];
+              break;
+      case 3: pos[p] = "00" + pos[p];
+              break;
+      case 4: pos[p] = "0" + pos[p];
+              break;
+    }
+  }
+  for (int t = 0; t < maxNumLinks; t++)
+  {
+    switch(torq[t].length())
+    {
+      case 1: torq[t] = "0000" + torq[t];
+              break;
+      case 2: torq[t] = "000" + torq[t];
+              break;
+      case 3: torq[t] = "00" + torq[t];
+              break;
+      case 4: torq[t] = "0" + torq[t];
+    }
+  }
+  
   // Position values with corresponding start markers,
   // then torque values with corresponding start markers (startMarkerOut)
   // and finally the end marker
-  outputStr = startMarker1 + String(rawPos1) + startMarkerOut1 + String(rawTorq1) +
+  outputStr = startMarker1 + pos[0] + startMarkerOut1 + torq[0] +
+              startMarker2 + pos[1] + startMarkerOut2 + torq[1] +
+              startMarker3 + pos[2] + startMarkerOut3 + torq[2] +
+              startMarker4 + pos[3] + startMarkerOut4 + torq[3] +
+              startMarker5 + pos[4] + startMarkerOut5 + torq[4] +
+              endMarkerOut;
+  
+             /* startMarker1 + String(rawPos1) + startMarkerOut1 + String(rawTorq1) +
               startMarker2 + String(rawPos2) + startMarkerOut2 + String(rawTorq2) +
               startMarker3 + String(rawPos3) + startMarkerOut3 + String(rawTorq3) +
               startMarker4 + String(rawPos4) + startMarkerOut4 + String(rawTorq4) +
               startMarker5 + String(rawPos5) + startMarkerOut5 + String(rawTorq5) +
-              endMarkerOut;
+              endMarkerOut; */
 
   outputStr.toCharArray(output, numCharsOut);
 
@@ -620,7 +661,7 @@ uint16_t readTorqueData(byte servoId)
   uint16_t rawTorq = 0;
   byte p = constrain(servoId, 1, numLinks);
 
-  rawTorq = adc->adc0->analogRead(torqPins[p]);
+  rawTorq = adc->adc0->analogRead(torqPins[p-1]);
   rawTorq = rawTorq & 0xFFF8; // Filter out some small noise (use 13 out of 16 bits)
   // Serial.println("  Torque: " + String(rawTorq)); // Test print
   return rawTorq;
