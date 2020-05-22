@@ -56,14 +56,7 @@ const char startMarkerN = 'n';
 
 // (6 chars * 10 values) + 1 for endmarker + 1 for null terminator
 const byte numCharsOut = 62;
-const char startMarkerOut1 = 'A';
-const char startMarkerOut2 = 'B';
-const char startMarkerOut3 = 'C';
-const char startMarkerOut4 = 'D';
-const char startMarkerOut5 = 'E';
-const char endMarkerOut = '\r';
-String outputStr;
-char output[numCharsOut];
+char outputArr[numCharsOut];
 
 // Values for packets to/from servos
 const byte maxPktLen = 7;
@@ -132,7 +125,7 @@ void loop()
     Serial.println(rawTorq5);
     /**/
     
-    //reportBack();
+    reportBack();
     /*Serial.println();*/
 
     sendAngleData();
@@ -486,59 +479,13 @@ void readServoData()
 // Write servo values back to serial port (can be read in through LabVIEW or serial monitor)
 void reportBack()
 {
-  // TODO use C string function instead to assemble output string
-  String pos[maxNumLinks] = {String(rawPos1), String(rawPos2), String(rawPos3), String(rawPos4), String(rawPos5)};
-  String torq[maxNumLinks] = {String(rawTorq1), String(rawTorq2), String(rawTorq3), String(rawTorq4), String(rawTorq5)};
+  // Position and torque values for each servo
+  // Corresponding start marker for each value, followed by the 5-digit (0-padded) value
+  // Start markers 'a' and 'A' correspond to servo 1, 'b' and 'B' to servo 2, and so on
+  sprintf(outputArr, "a%05db%05dc%05dd%05de%05dA%05dB%05dC%05dD%05dE%05d\r",
+            rawPos1, rawPos2, rawPos3, rawPos4, rawPos5, rawTorq1, rawTorq2, rawTorq3, rawTorq4, rawTorq5);
 
-  for (int p = 0; p < maxNumLinks; p++)
-  {
-    switch(pos[p].length())
-    {
-      case 1: pos[p] = "0000" + pos[p];
-              break;
-      case 2: pos[p] = "000" + pos[p];
-              break;
-      case 3: pos[p] = "00" + pos[p];
-              break;
-      case 4: pos[p] = "0" + pos[p];
-              break;
-    }
-  }
-  for (int t = 0; t < maxNumLinks; t++)
-  {
-    switch(torq[t].length())
-    {
-      case 1: torq[t] = "0000" + torq[t];
-              break;
-      case 2: torq[t] = "000" + torq[t];
-              break;
-      case 3: torq[t] = "00" + torq[t];
-              break;
-      case 4: torq[t] = "0" + torq[t];
-    }
-  }
-  
-  // Position values with corresponding start markers,
-  // then torque values with corresponding start markers (startMarkerOut)
-  // and finally the end marker
-  outputStr = startMarker1 + pos[0] + startMarkerOut1 + torq[0] +
-              startMarker2 + pos[1] + startMarkerOut2 + torq[1] +
-              startMarker3 + pos[2] + startMarkerOut3 + torq[2] +
-              startMarker4 + pos[3] + startMarkerOut4 + torq[3] +
-              startMarker5 + pos[4] + startMarkerOut5 + torq[4] +
-              endMarkerOut;
-  
-             /* startMarker1 + String(rawPos1) + startMarkerOut1 + String(rawTorq1) +
-              startMarker2 + String(rawPos2) + startMarkerOut2 + String(rawTorq2) +
-              startMarker3 + String(rawPos3) + startMarkerOut3 + String(rawTorq3) +
-              startMarker4 + String(rawPos4) + startMarkerOut4 + String(rawTorq4) +
-              startMarker5 + String(rawPos5) + startMarkerOut5 + String(rawTorq5) +
-              endMarkerOut; */
-
-  outputStr.toCharArray(output, numCharsOut);
-
-  Serial.write(output);
-  //Serial.println(outputStr);
+  Serial.write(outputArr);
 }
 
 
