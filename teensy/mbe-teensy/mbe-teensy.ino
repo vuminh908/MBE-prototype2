@@ -100,7 +100,9 @@ void loop()
 
   if(newData)
   {
+    Serial.println("* Received Command: " + String(micros()));
     readServoData();
+    Serial.println("* Read Servo Data: " + String(micros()));
     /*
     Serial.print(rawPos1);
     Serial.print('\t');
@@ -126,9 +128,11 @@ void loop()
     /**/
     
     reportBack();
-    /*Serial.println();*/
+    Serial.println();
+    Serial.println("* Return Data: " + String(micros()));
 
     sendAngleData();
+    Serial.println("* Set Servo Angles: " + String(micros()) + "\n");
     /*
     Serial.print(angle1);
     Serial.print("\t");
@@ -151,6 +155,7 @@ void loop()
 // Reads value up to four significant digits (with decimal point)
 void recieveCommand()
 {
+  // TODO fix commands for <5 servos (could just be for 1 servo)
   static byte ndx1 = 0;
   static byte ndx2 = 0;
   static byte ndx3 = 0;
@@ -515,6 +520,17 @@ uint16_t requestPositionData(byte servoId)
   outputPkts[3] = 0; // Reg data length
   outputPkts[4] = computePktChecksum(0);
 
+  // Debugging - print out packet in readable form
+  Serial.print("  ");
+  for(int i = 0; i < minPacketLength; i++)
+  {
+    if(outputPkts[i] < 0x10)
+      Serial.print('0');
+    Serial.print(outputPkts[i], HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+
   SERIAL_TX.write(outputPkts, minPacketLength);
 
   // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
@@ -540,14 +556,15 @@ uint16_t readPositionData(byte servoId)
   bool validRX = true;
   uint16_t rawPos = 0;
 
-  // Serial.print("  ");
+  Serial.print("  "); // For debug printing
   while (SERIAL_RX.available())
   {
     rb = SERIAL_RX.read();
-    // if(rb < 0x10)
-    //   Serial.print('0');
-    // Serial.print(rb, HEX);
-    // Serial.print(' ');
+    // Debugging - Print out received bytes in readable form
+    if(rb < 0x10)
+      Serial.print('0');
+    Serial.print(rb, HEX);
+    Serial.print(' ');
 
     if (validRX)
     {
@@ -589,11 +606,12 @@ uint16_t readPositionData(byte servoId)
             validRX = false;
           rawPos = (short)(dataH) << 8;
           rawPos += dataL;
-          // Serial.println("\n  Position: " + String(rawPos)); // Test print
+          Serial.println("\n    Position: " + String(rawPos)); // Test print for debugging
           goto readPosRet;
       }
     }
   }
+  Serial.println(); // For debug printing
 
 readPosRet:
   SERIAL_RX.clear();
