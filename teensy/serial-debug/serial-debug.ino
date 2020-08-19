@@ -1,7 +1,9 @@
 // Simple serial reader to debug serial communication
 // Prints anything received in serial port to USB serial port in readable form
 
-#define SERIAL Serial1  // Serial port to use for input
+#define SERIAL     Serial1  // Serial port to use for input
+#define WRITE_HDR  0x96
+#define RETURN_HDR 0x69
 
 const unsigned long baudRate = 115200;
 byte rb;
@@ -26,8 +28,13 @@ void loop() {
   while (SERIAL.available() > 0)
   {
     rb = SERIAL.read();
+
+    if (rb == WRITE_HDR || rb == RETURN_HDR)
+      Serial.println();
+
     sprintf(out, "%02X ", rb);
     Serial.write(out);
+
     if (sameLine)
       printCRLF = true;
     else

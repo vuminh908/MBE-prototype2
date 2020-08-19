@@ -4,7 +4,7 @@
 //
 // Interfacing with Teensy ADC:
 //    Examples by pedvide, author of Teensy ADC library, used as reference
-//    http://pedvide.github.io/ADC/docs/Teensy_3_6_html/index.html
+//    http://pedvide.github.io/ADC/docs/Teensy_3_2_html/index.html
 
 #include <ADC.h>
 
@@ -59,8 +59,8 @@ const byte numCharsOut = 62;
 char outputArr[numCharsOut];
 
 // Values for packets to/from servos
-const byte maxPktLen = 7;
-byte outputPkts[maxPktLen];
+//const byte maxPktLen = 7;
+//byte outputPkts[maxPktLen];
 const byte packetDataLength = 2;
 const byte minPacketLength = 5;
 
@@ -432,9 +432,36 @@ void sendAngleData()
 void readServoData()
 {
   // Can safely assume at least 1 link
-  rawPos1 = requestPositionData(1);
-  rawTorq1 = readTorqueData(1);
+  // rawPos1 = requestPositionData(1);
+  // rawTorq1 = readTorqueData(1);
 
+  requestPositionData(1);
+  if (numLinks >= 2)
+    requestPositionData(2);
+  if (numLinks >= 3)
+    requestPositionData(3);
+
+  // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
+  // Re-enable after reading returned data from servo
+  SERIAL_TX.flush();
+  SERIAL_TX.end();
+  SERIAL_RX.clear();
+  digitalWrite(1, LOW);
+  delay(20);  // Typ. 20 ms delay before servo returns data
+  rawPos1 = readPositionData(1);
+  if (numLinks >= 2)
+    rawPos2 = readPositionData(2);
+  if (numLinks >= 3)
+    rawPos3 = readPositionData(3);
+  SERIAL_TX.begin(baudRate);
+
+  rawTorq1 = readTorqueData(1);
+  if (numLinks >= 2)
+    rawTorq2 = readTorqueData(2);
+  if (numLinks >= 3)
+    rawTorq3 = readTorqueData(3);
+
+/*
   if(numLinks >= 2)
   {
     rawPos2 = requestPositionData(2);
@@ -478,6 +505,7 @@ void readServoData()
     rawPos5 = 0;
     rawTorq5 = 0;
   }
+  */
 } // End readServoData function
 
 
@@ -497,51 +525,84 @@ void reportBack()
 // Send packet to specified servo to set angle
 void sendAnglePacket(byte servoId, uint16_t mappedAngle)
 {
-  outputPkts[0] = WRITE_HEADER;
-  outputPkts[1] = servoId;
-  outputPkts[2] = REG_POSITION_NEW;
-  outputPkts[3] = packetDataLength; // Reg data length
-  outputPkts[4] = (byte)(mappedAngle & 0xFF); // Data lower byte
-  outputPkts[5] = (byte)((mappedAngle & 0xFF00) >> 8); // Data higher byte
-  outputPkts[6] = computePktChecksum(packetDataLength);
+//  outputPkts[0] = WRITE_HEADER;
+//  outputPkts[1] = servoId;
+//  outputPkts[2] = REG_POSITION_NEW;
+//  outputPkts[3] = packetDataLength; // Reg data length
+//  outputPkts[4] = (byte)(mappedAngle & 0xFF); // Data lower byte
+//  outputPkts[5] = (byte)((mappedAngle & 0xFF00) >> 8); // Data higher byte
+//  outputPkts[6] = computePktChecksum(outputPkts, packetDataLength);
 
-  SERIAL_TX.write(outputPkts, (minPacketLength + packetDataLength));
-} // End sendAngleData function
-
-
-// Send packet to servo to receive position packet back (also calls read function)
-uint16_t requestPositionData(byte servoId)
-{
-  uint16_t posData = 0;
-
-  outputPkts[0] = WRITE_HEADER;
-  outputPkts[1] = servoId;
-  outputPkts[2] = REG_POSITION;
-  outputPkts[3] = 0; // Reg data length
-  outputPkts[4] = computePktChecksum(0);
+  const byte outLen = minPacketLength + packetDataLength;
+  byte outPkts[outLen];
+  byte dataL = (byte)(mappedAngle & 0xFF);
+  byte dataH = (byte)((mappedAngle & 0xFF00) >> 8);
+  byte checksum = servoId + REG_POSITION_NEW + packetDataLength + dataL + dataH;
+  outPkts[0] = WRITE_HEADER;
+  outPkts[1] = servoId;
+  outPkts[2] = REG_POSITION_NEW;
+  outPkts[3] = packetDataLength; // Reg data length
+  outPkts[4] = dataL; // Data lower byte
+  outPkts[5] = dataH; // Data higher byte
+  outPkts[6] = checksum; //computePktChecksum(outPkts, packetDataLength);
 
   // Debugging - print out packet in readable form
   Serial.print("  ");
-  for(int i = 0; i < minPacketLength; i++)
+  for(int i = 0; i < outLen; i++)
   {
-    if(outputPkts[i] < 0x10)
+    if(outPkts[i] < 0x10)
       Serial.print('0');
-    Serial.print(outputPkts[i], HEX);
+    Serial.print(outPkts[i], HEX);
     Serial.print(' ');
   }
   Serial.println();
 
-  SERIAL_TX.write(outputPkts, minPacketLength);
+  SERIAL_TX.write(outPkts, outLen);
+} // End sendAngleData function
 
-  // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
-  // Re-enable after reading returned data from servo
-  SERIAL_TX.end();
-  SERIAL_RX.clear();
-  digitalWrite(1, LOW);
-  delay(20);  // Typ. 20 ms delay before servo returns data
-  posData = readPositionData(servoId);
-  SERIAL_TX.begin(baudRate);
-  return posData;
+
+// Send packet to servo to receive position packet back (must call read function afterwards)
+void requestPositionData(byte servoId)
+{
+//  uint16_t posData = 0;
+
+//  outputPkts[0] = WRITE_HEADER;
+//  outputPkts[1] = servoId;
+//  outputPkts[2] = REG_POSITION;
+//  outputPkts[3] = 0; // Reg data length
+//  outputPkts[4] = computePktChecksum(0);
+
+  const byte outLen = minPacketLength;
+  byte outPkts[outLen];
+  byte checksum = servoId + REG_POSITION;
+  outPkts[0] = WRITE_HEADER;
+  outPkts[1] = servoId;
+  outPkts[2] = REG_POSITION;
+  outPkts[3] = 0; // Reg data length
+  outPkts[4] = checksum; //computePktChecksum(outPkts, 0);
+
+  // Debugging - print out packet in readable form
+  Serial.print("  ");
+  for(int i = 0; i < outLen; i++)
+  {
+    if(outPkts[i] < 0x10)
+      Serial.print('0');
+    Serial.print(outPkts[i], HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+
+  SERIAL_TX.write(outPkts, outLen);
+
+  // // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
+  // // Re-enable after reading returned data from servo
+  // SERIAL_TX.end();
+  // SERIAL_RX.clear();
+  // digitalWrite(1, LOW);
+  // delay(20);  // Typ. 20 ms delay before servo returns data
+  // posData = readPositionData(servoId);
+  // SERIAL_TX.begin(baudRate);
+  // return posData;
 } // End requestPositionData function
 
 
@@ -633,12 +694,12 @@ uint16_t readTorqueData(byte servoId)
 }
 
 
-// Compute checksum of given length of outputPkts
-byte computePktChecksum(byte dataLength)
+// Compute checksum of given byte array and its data portion length
+byte computePktChecksum(byte pktArr[], byte dataLength)
 {
   unsigned short checksum = 0;
   for (byte j = 1; j <= (minPacketLength - 2 + dataLength); j++)
-    checksum += outputPkts[j];
+    checksum += pktArr[j];
 
   return (byte)(checksum % 256);
 } // End computePktChecksum
