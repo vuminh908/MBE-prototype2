@@ -59,8 +59,8 @@ const byte numCharsOut = 62;
 char outputArr[numCharsOut];
 
 // Values for packets to/from servos
-//const byte maxPktLen = 7;
-//byte outputPkts[maxPktLen];
+const byte maxPktLen = 7;
+byte outputPkts[maxPktLen];
 const byte packetDataLength = 2;
 const byte minPacketLength = 5;
 
@@ -100,9 +100,9 @@ void loop()
 
   if(newData)
   {
-    Serial.println("* Received Command: " + String(micros()));
+    //Serial.println("* Received Command: " + String(micros()));
     readServoData();
-    Serial.println("* Read Servo Data: " + String(micros()));
+    //Serial.println("* Read Servo Data: " + String(micros()));
     /*
     Serial.print(rawPos1);
     Serial.print('\t');
@@ -128,11 +128,11 @@ void loop()
     /**/
     
     reportBack();
-    Serial.println();
-    Serial.println("* Return Data: " + String(micros()));
+    //Serial.println();
+    //Serial.println("* Return Data: " + String(micros()));
 
     sendAngleData();
-    Serial.println("* Set Servo Angles: " + String(micros()) + "\n");
+    //Serial.println("* Set Servo Angles: " + String(micros()) + "\n");
     /*
     Serial.print(angle1);
     Serial.print("\t");
@@ -185,7 +185,7 @@ void recieveCommand()
               if(tempNum >= 1 && tempNum <= maxNumLinks)
               {
                 numLinks = tempNum;
-                Serial.println(numLinks);
+                //Serial.println(numLinks); // Feedback for debugging
               }
               else // Erroneous link number, don't modify numLinks, drop attempted read and move on
               {
@@ -498,74 +498,57 @@ void reportBack()
 // Send packet to specified servo to set angle
 void sendAnglePacket(byte servoId, uint16_t mappedAngle)
 {
-//  outputPkts[0] = WRITE_HEADER;
-//  outputPkts[1] = servoId;
-//  outputPkts[2] = REG_POSITION_NEW;
-//  outputPkts[3] = packetDataLength; // Reg data length
-//  outputPkts[4] = (byte)(mappedAngle & 0xFF); // Data lower byte
-//  outputPkts[5] = (byte)((mappedAngle & 0xFF00) >> 8); // Data higher byte
-//  outputPkts[6] = computePktChecksum(outputPkts, packetDataLength);
-
-  const byte outLen = minPacketLength + packetDataLength;
-  byte outPkts[outLen];
   byte dataL = (byte)(mappedAngle & 0xFF);
   byte dataH = (byte)((mappedAngle & 0xFF00) >> 8);
   byte checksum = servoId + REG_POSITION_NEW + packetDataLength + dataL + dataH;
-  outPkts[0] = WRITE_HEADER;
-  outPkts[1] = servoId;
-  outPkts[2] = REG_POSITION_NEW;
-  outPkts[3] = packetDataLength; // Reg data length
-  outPkts[4] = dataL; // Data lower byte
-  outPkts[5] = dataH; // Data higher byte
-  outPkts[6] = checksum; //computePktChecksum(outPkts, packetDataLength);
+
+  outputPkts[0] = WRITE_HEADER;
+  outputPkts[1] = servoId;
+  outputPkts[2] = REG_POSITION_NEW;
+  outputPkts[3] = packetDataLength; // Reg data length
+  outputPkts[4] = dataL; // Data lower byte
+  outputPkts[5] = dataH; // Data higher byte
+  outputPkts[6] = checksum; //computePktChecksum(packetDataLength);
 
   // Debugging - print out packet in readable form
-  Serial.print("  ");
-  for(int i = 0; i < outLen; i++)
-  {
-    if(outPkts[i] < 0x10)
-      Serial.print('0');
-    Serial.print(outPkts[i], HEX);
-    Serial.print(' ');
-  }
-  Serial.println();
+//  Serial.print("  ");
+//  for(int i = 0; i < minPacketLength + packetDataLength; i++)
+//  {
+//    if(outputPkts[i] < 0x10)
+//      Serial.print('0');
+//    Serial.print(outputPkts[i], HEX);
+//    Serial.print(' ');
+//  }
+//  Serial.println();
 
-  SERIAL_TX.write(outPkts, outLen);
+  SERIAL_TX.write(outputPkts, minPacketLength + packetDataLength);
 } // End sendAngleData function
 
 
 // Send packet to servo to receive position packet back (must call read function afterwards)
-void requestPositionData(byte servoId)
+uint16_t requestPositionData(byte servoId)
 {
-//  uint16_t posData = 0;
-
-//  outputPkts[0] = WRITE_HEADER;
-//  outputPkts[1] = servoId;
-//  outputPkts[2] = REG_POSITION;
-//  outputPkts[3] = 0; // Reg data length
-//  outputPkts[4] = computePktChecksum(0);
-
-  const byte outLen = minPacketLength;
-  byte outPkts[outLen];
+  uint16_t posData = 0;
   byte checksum = servoId + REG_POSITION;
-  outPkts[0] = WRITE_HEADER;
-  outPkts[1] = servoId;
-  outPkts[2] = REG_POSITION;
-  outPkts[3] = 0; // Reg data length
-  outPkts[4] = checksum; //computePktChecksum(outPkts, 0);
+
+  outputPkts[0] = WRITE_HEADER;
+  outputPkts[1] = servoId;
+  outputPkts[2] = REG_POSITION;
+  outputPkts[3] = 0; // Reg data length
+  outputPkts[4] = checksum; //computePktChecksum(0);
 
   // Debugging - print out packet in readable form
-  Serial.print("  ");
-  for(int i = 0; i < outLen; i++)
-  {
-    if(outPkts[i] < 0x10)
-      Serial.print('0');
-    Serial.print(outPkts[i], HEX);
-    Serial.print(' ');
-  }
-  Serial.println();
+//  Serial.print("  ");
+//  for(int i = 0; i < minPacketLength; i++)
+//  {
+//    if(outputPkts[i] < 0x10)
+//      Serial.print('0');
+//    Serial.print(outputPkts[i], HEX);
+//    Serial.print(' ');
+//  }
+//  Serial.println();
 
-  SERIAL_TX.write(outPkts, outLen);
+  SERIAL_TX.write(outputPkts, minPacketLength);
 
   // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
   // Re-enable after reading returned data from servo
@@ -590,15 +573,15 @@ uint16_t readPositionData(byte servoId)
   bool validRX = true;
   uint16_t rawPos = 0;
 
-  Serial.print("  "); // For debug printing
+//  Serial.print("  "); // For debug printing
   while (SERIAL_RX.available())
   {
     rb = SERIAL_RX.read();
     // Debugging - Print out received bytes in readable form
-    if(rb < 0x10)
-      Serial.print('0');
-    Serial.print(rb, HEX);
-    Serial.print(' ');
+//    if(rb < 0x10)
+//      Serial.print('0');
+//    Serial.print(rb, HEX);
+//    Serial.print(' ');
 
     if (validRX)
     {
@@ -640,12 +623,12 @@ uint16_t readPositionData(byte servoId)
             validRX = false;
           rawPos = (short)(dataH) << 8;
           rawPos += dataL;
-          Serial.println("\n    Position: " + String(rawPos)); // Test print for debugging
+          //Serial.println("\n    Position: " + String(rawPos)); // Test print for debugging
           goto readPosRet;
       }
     }
   }
-  Serial.println(); // For debug printing
+  //Serial.println(); // For debug printing
 
 readPosRet:
   SERIAL_RX.clear();
@@ -666,13 +649,14 @@ uint16_t readTorqueData(byte servoId)
   return rawTorq;
 }
 
-
+/*
 // Compute checksum of given byte array and its data portion length
-byte computePktChecksum(byte pktArr[], byte dataLength)
+byte computePktChecksum(byte dataLength)
 {
   unsigned short checksum = 0;
   for (byte j = 1; j <= (minPacketLength - 2 + dataLength); j++)
-    checksum += pktArr[j];
+    checksum += outputPkts[j];
 
   return (byte)(checksum % 256);
 } // End computePktChecksum
+*/
