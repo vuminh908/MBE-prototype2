@@ -429,39 +429,13 @@ void sendAngleData()
 
 // Read raw servo data (position and torque) from links
 // TODO decouple readPositionData from requestPositionData
+//  if we ever get updated servos that support RS485 or CAN
 void readServoData()
 {
   // Can safely assume at least 1 link
-  // rawPos1 = requestPositionData(1);
-  // rawTorq1 = readTorqueData(1);
-
-  requestPositionData(1);
-  if (numLinks >= 2)
-    requestPositionData(2);
-  if (numLinks >= 3)
-    requestPositionData(3);
-
-  // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
-  // Re-enable after reading returned data from servo
-  SERIAL_TX.flush();
-  SERIAL_TX.end();
-  SERIAL_RX.clear();
-  digitalWrite(1, LOW);
-  delay(20);  // Typ. 20 ms delay before servo returns data
-  rawPos1 = readPositionData(1);
-  if (numLinks >= 2)
-    rawPos2 = readPositionData(2);
-  if (numLinks >= 3)
-    rawPos3 = readPositionData(3);
-  SERIAL_TX.begin(baudRate);
-
+  rawPos1 = requestPositionData(1);
   rawTorq1 = readTorqueData(1);
-  if (numLinks >= 2)
-    rawTorq2 = readTorqueData(2);
-  if (numLinks >= 3)
-    rawTorq3 = readTorqueData(3);
 
-/*
   if(numLinks >= 2)
   {
     rawPos2 = requestPositionData(2);
@@ -505,7 +479,6 @@ void readServoData()
     rawPos5 = 0;
     rawTorq5 = 0;
   }
-  */
 } // End readServoData function
 
 
@@ -594,15 +567,15 @@ void requestPositionData(byte servoId)
 
   SERIAL_TX.write(outPkts, outLen);
 
-  // // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
-  // // Re-enable after reading returned data from servo
-  // SERIAL_TX.end();
-  // SERIAL_RX.clear();
-  // digitalWrite(1, LOW);
-  // delay(20);  // Typ. 20 ms delay before servo returns data
-  // posData = readPositionData(servoId);
-  // SERIAL_TX.begin(baudRate);
-  // return posData;
+  // Temporarily disable Serial1 to set pin 1 low to allow SBUS high
+  // Re-enable after reading returned data from servo
+  SERIAL_TX.end();
+  SERIAL_RX.clear();
+  digitalWrite(1, LOW);
+  delay(20);  // Typ. 20 ms delay before servo returns data
+  posData = readPositionData(servoId);
+  SERIAL_TX.begin(baudRate);
+  return posData;
 } // End requestPositionData function
 
 
