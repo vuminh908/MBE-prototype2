@@ -10,6 +10,7 @@
 // Input only carriage return \r to read ID register
 // Input '!' followed by desired ID and \r to set ID of servo (to keep ID set, power-cycle servo)
 // Input '*' to reset to factory default
+// Input ';' to perform soft reset
 // Input '?' to set ID field in packets to 0 (broadcast)
 // Input 'q', 'w', or 'e' to set ID field in packets to 1, 2, or 3, respectively
 // Input '.' to reset ID field in packets to what it was before
@@ -23,6 +24,7 @@
 #define REG_ID              0x32
 #define REG_CONFIG_SAVE     0x70
 #define REG_FACTORY_DEFAULT 0x6E
+#define REG_POWER_CONFIG    0x46    // Soft reset
 #define SERIAL_TX           Serial1
 #define SERIAL_RX           Serial2
 
@@ -54,6 +56,7 @@ const char id3Marker = 'e';
 const char resetIdMarker = '?';
 const char restoreIdMarker = '.';
 const char factoryRstMarker = '*';
+const char softRstMarker = ';';
 
 //const char startMarkerOut = 'a';
 //const char endMarkerOut = '!';
@@ -224,6 +227,9 @@ void receiveCommand()
             break;
           case factoryRstMarker: // Perform factory reset
             doFactoryReset();
+            break;
+          case softRstMarker: // Perform soft reset
+            doSoftReset();
             break;
         }
       }
@@ -509,6 +515,21 @@ void doFactoryReset()
   printPacketToSend(0);
   SERIAL_TX.write(outputArr, minPacketLength);
 } // End doFactoryReset
+
+
+// Do soft reset
+void doSoftReset()
+{
+  outputArr[0] = WRITE_HEADER;
+  outputArr[1] = servoId;
+  outputArr[2] = REG_POWER_CONFIG;
+  outputArr[3] = 0; // Reg data length
+  outputArr[4] = computeChecksum(0);
+
+  Serial.println("SOFT RESET:");
+  printPacketToSend(0);
+  SERIAL_TX.write(outputArr, minPacketLength);
+} // End doSoftReset
 
 
 // Send save command
