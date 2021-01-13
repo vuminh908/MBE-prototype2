@@ -9,7 +9,7 @@
 // Input '~' to toggle demo sine wave (about 0.625 Hz frequency)
 // Input only carriage return \r to read ID register
 // Input '!' followed by desired ID and \r to set ID of servo (to keep ID set, power-cycle servo)
-// Input '*' to perform factory reset
+// Input '*' to reset to factory default
 // Input '?' to set ID field in packets to 0 (broadcast)
 // Input 'q', 'w', or 'e' to set ID field in packets to 1, 2, or 3, respectively
 // Input '.' to reset ID field in packets to what it was before
@@ -48,6 +48,9 @@ const char startMarkerIn = 'a';
 const char endMarkerIn = '\r';
 const char demoMarker = '~';
 const char setIdMarker = '!';
+const char id1Marker = 'q';
+const char id2Marker = 'w';
+const char id3Marker = 'e';
 const char resetIdMarker = '?';
 const char restoreIdMarker = '.';
 const char factoryRstMarker = '*';
@@ -182,45 +185,47 @@ void receiveCommand()
     }
     else if (!demo && rc != demoMarker)
     {
-      switch (rc)
+      if (rc == startMarkerIn)
       {
-        case startMarkerIn: // Begin reading angle
-          readState = READ;
-          break;
-        case setIdMarker: // Begin reading ID to set
-          readState = SETID;
-          break;
-        case endMarkerIn: // Request/Read servo ID
-          requestId();
-          break;
-        case resetIdMarker: // Reset ID (to 0) of packets Teensy sends
-          Serial.clear();
-          servoId = 0;
-          Serial.println("ID of packets reset to 0");
-          break;
-        case 'q': // Set ID in packets to 1
-          Serial.clear();
-          servoId = 1;
-          Serial.println("ID of packets set to 1");
-          break;
-        case 'w': // Set ID in packets to 2
-          Serial.clear();
-          servoId = 2;
-          Serial.println("ID of packets set to 2");
-          break;
-        case 'e': // Set ID in packets to 3
-          Serial.clear();
-          servoId = 3;
-          break;
-        case restoreIdMarker: // Set ID of packets Teensy sends to what it was before
-          Serial.clear();
-          servoId = expectedId;
-          Serial.println("ID of packets restored to " + String(expectedId));
-          break;
-        case factoryRstMarker: // Perform factory reset
-          Serial.clear();
-          doFactoryReset();
-          break;
+        // Begin reading angle
+        readState = READ;
+      }
+      else if (rc == setIdMarker)
+      {
+        // Begin reading ID to set
+        readState = SETID;
+      }
+      else
+      {
+        Serial.clear();
+        switch (rc)
+        {
+          case endMarkerIn: // Request/Read servo ID
+            requestId();
+            break;
+          case resetIdMarker: // Reset ID (to 0) of packets Teensy sends
+            servoId = 0;
+            Serial.println("ID of packets reset to 0");
+            break;
+          case id1Marker: // Set ID in packets to 1
+            servoId = 1;
+            Serial.println("ID of packets set to 1");
+            break;
+          case id2Marker: // Set ID in packets to 2
+            servoId = 2;
+            Serial.println("ID of packets set to 2");
+            break;
+          case id3Marker: // Set ID in packets to 3
+            servoId = 3;
+            break;
+          case restoreIdMarker: // Set ID of packets Teensy sends to what it was before
+            servoId = expectedId;
+            Serial.println("ID of packets restored to " + String(expectedId));
+            break;
+          case factoryRstMarker: // Perform factory reset
+            doFactoryReset();
+            break;
+        }
       }
     }
     else if (rc == demoMarker) // Toggle demo
@@ -457,11 +462,12 @@ void readId()
             validRX = false;
           if (validRX)
             Serial.println("\n  ID: " + String(id));
+          else
+            Serial.println();
           goto readIdRet;
       }
     }
   }
-  Serial.println();
 
 readIdRet:
   SERIAL_RX.clear();
@@ -506,6 +512,8 @@ void doFactoryReset()
 
 
 // Send save command
+// Writing 0xFFFF to the register saves it to flash ROM,
+//  so the register values persist after power is cycled
 void saveConfig()
 {
   outputArr[0] = WRITE_HEADER;
